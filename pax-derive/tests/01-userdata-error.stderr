@@ -1,0 +1,19 @@
+error: expected pattern, found `,`
+ --> tests/01-userdata-error.rs:3:10
+  |
+3 | #[derive(UserData)]
+  |          ^^^^^^^^ expected pattern
+  |
+  = note: this error originates in the derive macro `UserData` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: proc-macro derive produced unparsable tokens
+ --> tests/01-userdata-error.rs:3:10
+  |
+3 | #[derive(UserData)]
+  |          ^^^^^^^^
+
+error: only unit enums are supported, C is not a unit variant
+ --> tests/01-userdata-error.rs:7:5
+  |
+7 |     C(i32),
+  |     ^

@@ -1,0 +1,21 @@
+[package]
+name = "pax-derive"
+version = "0.1.0"
+edition = "2021"
+autotests = false
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/tests.rs"
+
+[dependencies]
+proc-macro2 = "1.0"
+syn = { version = "2.0", features = ["extra-traits"] }
+quote = "1.0"
+
+[dev-dependencies]
+mlua = { version = "0.9.7", features = ["lua54", "vendored"] }
+trybuild = { version = "1.0.91", features = ["diff"] }

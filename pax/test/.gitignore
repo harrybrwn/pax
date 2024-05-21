@@ -1,0 +1,4 @@
+*.deb
+golangci-lint/
+workbench/
+scripts/
