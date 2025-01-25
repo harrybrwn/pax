@@ -335,6 +335,10 @@ impl BuildSpec {
             apt_sources: overrides.get("apt_sources")?,
         })
     }
+
+    pub(crate) fn parse<R: io::Read>(r: R) -> anyhow::Result<Self> {
+        Ok(Self {})
+    }
 }
 
 fn zero<T: Default, const N: usize>(arr: &mut [T; N]) {

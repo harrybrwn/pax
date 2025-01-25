@@ -208,7 +208,7 @@ async fn get(u: &str, client: Client) -> Result<hyper::Response<hyper::Body>> {
             anyhow::bail!("no 'location' header");
         }
         if !status.is_success() {
-            anyhow::bail!("bad status code {}", status);
+            anyhow::bail!("bad status code: {}", status);
         }
         break Ok(res);
     }

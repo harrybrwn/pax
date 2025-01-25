@@ -9,7 +9,8 @@ use cargo::core::{
 use cargo::ops::CompileOptions;
 use cargo::ops::{self, CompileFilter};
 use cargo::util::command_prelude::root_manifest;
-use cargo::util::{homedir, interning::InternedString, Config};
+use cargo::util::{homedir, interning::InternedString};
+use cargo::GlobalContext;
 
 #[derive(Debug, pax_derive::FromLua)]
 pub(crate) struct Cargo {
@@ -43,7 +44,7 @@ impl Cargo {
             return self.run_from_shell();
         }
         let cwd = self.root();
-        let mut config = Config::new(
+        let mut config = GlobalContext::new(
             Shell::new(),
             cwd.clone(),
             homedir(&cwd).ok_or_else(|| {
@@ -77,7 +78,7 @@ impl Cargo {
         options.build_config.requested_profile = self.profile();
         options.build_config.keep_going = self.keep_going;
         options.build_config.unit_graph = false;
-        options.honor_rust_version = !self.ignore_rust_version;
+        options.honor_rust_version = Some(!self.ignore_rust_version);
         if let Some(ref pkgid) = self.pkgid {
             options.filter = CompileFilter::single_bin(pkgid.clone());
             options.spec = ops::Packages::Packages(vec![pkgid.clone()]);
@@ -253,7 +254,7 @@ impl Cargo {
     }
 
     #[allow(dead_code, unused_variables)]
-    fn virtual_manifest(&self, config: &Config) -> VirtualManifest {
+    fn virtual_manifest(&self, config: &GlobalContext) -> VirtualManifest {
         let members = None;
         let default_members = None;
         let exclude = None;

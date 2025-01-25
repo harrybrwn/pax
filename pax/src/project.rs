@@ -13,7 +13,7 @@ use crate::{
     build::{BuildSpec, File, DEFAULT_DIST},
     dl::{self, DownloadOpts},
     go::Go,
-    util::{scdoc, SCDocOpts},
+    util::{self, scdoc, SCDocOpts},
 };
 
 #[derive(Debug)]
@@ -191,6 +191,24 @@ impl mlua::UserData for Project {
             this.add_bin(out)?;
             Ok(())
         });
+        methods.add_method_mut(
+            "download_binary",
+            |_, this, (url, name): (String, Option<String>)| {
+                let fname = match name {
+                    Some(n) => n,
+                    None => util::url_filename(&url).map_err(|e| mlua::Error::runtime(e))?,
+                };
+                let out = this.bin_path(&fname);
+                let opts = DownloadOpts {
+                    release: None,
+                    arch: None,
+                    out: Some(out.clone()),
+                };
+                dl::fetch(url, opts).map_err(|e| mlua::Error::runtime(e))?;
+                this.add_bin(&out)?;
+                Ok(())
+            },
+        );
         methods.add_method("print", |_, this, ()| {
             println!("{:#?}", this);
             Ok(())

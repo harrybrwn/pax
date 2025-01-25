@@ -6,6 +6,7 @@ mod error;
 mod git;
 mod go;
 mod modules;
+mod os;
 mod project;
 mod util;
 
@@ -120,6 +121,7 @@ impl mlua::UserData for PaxConfig {
         fields.add_field("dl", modules::DlModule);
         fields.add_field("path", modules::PathMod);
         fields.add_field("fs", modules::FSMod);
+        fields.add_field("os", modules::OsMod);
         fields.add_field("Urgency", deb::Urgency::Low); // adds all variants
         fields.add_field("Priority", deb::Priority::default());
     }

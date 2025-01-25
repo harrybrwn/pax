@@ -8,11 +8,11 @@ use git_url_parse::GitUrl;
 
 #[derive(Debug, Default, pax_derive::FromLua)]
 pub(crate) struct GitCloneOpts {
-    pub repo: Option<String>,
+    pub repo: String,
     pub dest: Option<String>,
     pub branch: Option<String>,
     pub depth: Option<u32>,
-    pub force: bool,
+    pub force: Option<bool>,
 }
 
 pub(crate) fn git_clone(repo: String, opts: GitCloneOpts) -> anyhow::Result<()> {

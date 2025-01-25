@@ -390,7 +390,7 @@ impl<'a> Walker<'a> {
 pub struct SCDocOpts {
     pub input: String,
     pub output: String,
-    pub compress: bool,
+    pub compress: Option<bool>,
 }
 
 pub fn scdoc(opts: SCDocOpts) -> io::Result<()> {
@@ -399,7 +399,8 @@ pub fn scdoc(opts: SCDocOpts) -> io::Result<()> {
     let mut child = process::Command::new("scdoc")
         .stdin(process::Stdio::piped())
         .stdout(process::Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .map_err(|e| io::Error::new(e.kind(), format!("failed to spawn scdoc command: {}", e)))?;
     let stdin = child.stdin.as_mut().ok_or(io::Error::new(
         io::ErrorKind::Interrupted,
         "failed to get child process stdin",
@@ -419,11 +420,20 @@ pub fn scdoc(opts: SCDocOpts) -> io::Result<()> {
                 format!("{}: failed to open scdoc output file {:?}", e, &opts.output),
             )
         })?;
-    if opts.compress {
+    if opts.compress.unwrap_or(false) {
         let mut gziper = GzEncoder::new(&mut outfile, Compression::default());
         io::copy(&mut out.stdout.as_slice(), &mut gziper)?;
     } else {
         io::copy(&mut out.stdout.as_slice(), &mut outfile)?;
     }
     Ok(())
+}
+
+pub fn url_filename(input: &str) -> anyhow::Result<String> {
+    let uri = url::Url::options().parse(input)?;
+    Ok(uri
+        .path_segments()
+        .and_then(|p| p.rev().next())
+        .and_then(|s| Some(String::from(s)))
+        .ok_or_else(|| anyhow::anyhow!("failed to get uri path segments"))?)
 }

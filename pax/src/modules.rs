@@ -8,6 +8,7 @@ use crate::dl;
 use crate::git;
 use crate::git::GitCloneOpts;
 use crate::go::Go;
+use crate::os::{exec, ExecOptions};
 use crate::util::{get_user_email, get_user_name, git_version};
 
 macro_rules! sub_module {
@@ -145,7 +146,7 @@ impl DlModule {
     }
 }
 
-sub_module!(@userdata PathMod; join, is_absolute, is_relative, parent);
+sub_module!(@userdata PathMod; join, is_absolute, is_relative, parent, basename);
 
 impl PathMod {
     fn join(_: &Lua, args: mlua::Variadic<mlua::Value>) -> mlua::Result<String> {
@@ -167,6 +168,14 @@ impl PathMod {
             .unwrap_or(Path::new(""))
             .to_string_lossy()
             .to_string())
+    }
+
+    fn basename(_: &Lua, s: String) -> mlua::Result<Option<String>> {
+        let name = Path::new(&s)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| Some(String::from(n)));
+        Ok(name)
     }
 }
 
@@ -280,4 +289,15 @@ fn path_from_lua(args: mlua::Variadic<mlua::Value>) -> mlua::Result<PathBuf> {
             c => Some(c),
         })
         .collect())
+}
+
+sub_module!(@userdata OsMod; exec);
+
+impl OsMod {
+    fn exec(
+        _: &mlua::Lua,
+        (bin, args, opts): (String, Option<Vec<String>>, Option<ExecOptions>),
+    ) -> mlua::Result<i32> {
+        Ok(exec(bin, args.unwrap_or(Vec::new()), opts)?)
+    }
 }
