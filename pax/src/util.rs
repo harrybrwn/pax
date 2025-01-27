@@ -371,8 +371,11 @@ impl<'a> Walker<'a> {
         if !dir.is_dir() {
             return Ok(());
         }
-        for entry in fs::read_dir(&dir)? {
-            let entry = entry?;
+        let mut entries: Vec<_> = fs::read_dir(&dir)?.filter_map(|d| d.ok()).collect();
+        entries.sort_by_key(|e| e.path());
+
+        for entry in entries {
+            // let entry = entry?;
             let p = entry.path();
             if let Ok(ft) = entry.file_type() {
                 if ft.is_dir() {

@@ -38,6 +38,8 @@ pub(crate) fn exec(bin: String, args: Vec<String>, opts: Option<ExecOptions>) ->
                 .create(true)
                 .open(fname)?;
             cmd = cmd.stdout(file);
+        } else {
+            cmd = cmd.stdout(std::io::stdout());
         }
         if let Some(fname) = opts.stdin_file {
             let file = std::fs::File::options()
@@ -47,7 +49,10 @@ pub(crate) fn exec(bin: String, args: Vec<String>, opts: Option<ExecOptions>) ->
                 .open(fname)?;
             cmd = cmd.stdin(file);
         }
+    } else {
+        cmd = cmd.stdout(std::io::stdout());
     }
+    cmd = cmd.stderr(std::io::stderr());
     let out = cmd.output()?;
     Ok(out.status.code().unwrap_or(0))
 }

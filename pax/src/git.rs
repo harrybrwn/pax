@@ -12,16 +12,24 @@ pub(crate) struct GitCloneOpts {
     pub dest: Option<String>,
     pub branch: Option<String>,
     pub depth: Option<u32>,
-    pub force: Option<bool>,
+    pub force: bool,
 }
 
-pub(crate) fn git_clone(repo: String, opts: GitCloneOpts) -> anyhow::Result<()> {
-    let mut args = vec!["clone"];
-    if let Some(ref r) = opts.repo {
-        args.push(r);
-    } else {
-        args.push(&repo);
+impl GitCloneOpts {
+    pub(crate) fn new(repo: String) -> Self {
+        Self {
+            repo,
+            dest: None,
+            branch: None,
+            depth: None,
+            force: false,
+        }
     }
+}
+
+pub(crate) fn git_clone(opts: GitCloneOpts) -> anyhow::Result<()> {
+    let mut args = vec!["clone"];
+    args.push(&opts.repo);
     if let Some(ref d) = opts.dest {
         args.push(d);
         if opts.force {
@@ -59,9 +67,9 @@ pub fn head(repo: &str) -> Result<String> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn clone(repo: String, opts: GitCloneOpts) -> Result<()> {
-    let u =
-        GitUrl::parse(&repo).map_err(|e| anyhow!("could not parse url before cloning: {}", e))?;
+pub(crate) fn clone(opts: GitCloneOpts) -> Result<()> {
+    let u = GitUrl::parse(&opts.repo)
+        .map_err(|e| anyhow!("could not parse url before cloning: {}", e))?;
     let mut dest = Path::new(u.name.as_str());
     if let Some(ref d) = opts.dest {
         dest = Path::new(d.as_str());
@@ -83,7 +91,11 @@ pub(crate) fn clone(repo: String, opts: GitCloneOpts) -> Result<()> {
     if let Some(ref branch) = opts.branch {
         b.branch(branch);
     }
-    match b.fetch_options(fo).with_checkout(co).clone(&repo, dest) {
+    match b
+        .fetch_options(fo)
+        .with_checkout(co)
+        .clone(&opts.repo, dest)
+    {
         Err(e) => {
             println!("clone error: {:?}", e);
             return Err(e.into());

@@ -70,7 +70,7 @@ impl<'a, W: Write> DataBuilder<'a, W> {
         self.size
     }
 
-    pub fn add_path<S, D>(&mut self, source: S, dest: D) -> io::Result<()>
+    pub fn add_path<S, D>(&mut self, source: S, dest: D, mode: Option<u32>) -> io::Result<()>
     where
         S: AsRef<Path>,
         D: AsRef<Path>,
@@ -82,11 +82,16 @@ impl<'a, W: Write> DataBuilder<'a, W> {
                 format!("{}: failed to stat file {:?}", e, source.as_ref()),
             )
         })?;
+        let mode = if let Some(mode) = mode {
+            mode
+        } else {
+            stat.mode()
+        };
         let ft = stat.file_type();
         if ft.is_symlink() {
             Err(to_io_err("symlinks are not supported file types"))
         } else if ft.is_file() {
-            self.add_reader_metadata(
+            self.add_reader(
                 &dst,
                 fs::File::open(&source).map_err(|e| {
                     io::Error::new(
@@ -94,7 +99,8 @@ impl<'a, W: Write> DataBuilder<'a, W> {
                         format!("{}: could not open file {:?}", e, source.as_ref()),
                     )
                 })?,
-                stat,
+                stat.size(),
+                mode,
             )
         } else if ft.is_dir() {
             walk(&source, |entry| {
@@ -471,9 +477,9 @@ mod tests {
         let mut hashes = Vec::new();
         (|| {
             let mut b = DataBuilder::new(&mut buf, &mut hashes);
-            b.add_path("test/d", "/usr/share/d")?;
-            b.add_path("test/one", "/usr/share/one")?;
-            b.add_path("test/two", "/usr/share/two")?;
+            b.add_path("test/d", "/usr/share/d", None)?;
+            b.add_path("test/one", "/usr/share/one", None)?;
+            b.add_path("test/two", "/usr/share/two", None)?;
             Ok::<_, std::io::Error>(())
         })()
         .unwrap();

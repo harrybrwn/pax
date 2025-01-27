@@ -87,6 +87,7 @@ impl mlua::UserData for Project {
         methods.add_method("dir", |_, this, ()| {
             Ok(this.cache_dir().to_string_lossy().to_string())
         });
+        methods.add_method("files", |_, this, ()| Ok(this.spec.files.clone()));
         methods.add_method_mut("add_binary", |_, this, val: String| this.add_bin(val));
         methods.add_method_mut("apt_source", |_, this, val| {
             if this.spec.apt_sources.is_none() {
@@ -193,20 +194,8 @@ impl mlua::UserData for Project {
         });
         methods.add_method_mut(
             "download_binary",
-            |_, this, (url, name): (String, Option<String>)| {
-                let fname = match name {
-                    Some(n) => n,
-                    None => util::url_filename(&url).map_err(|e| mlua::Error::runtime(e))?,
-                };
-                let out = this.bin_path(&fname);
-                let opts = DownloadOpts {
-                    release: None,
-                    arch: None,
-                    out: Some(out.clone()),
-                };
-                dl::fetch(url, opts).map_err(|e| mlua::Error::runtime(e))?;
-                this.add_bin(&out)?;
-                Ok(())
+            |_, this, (url, name, opts): (String, Option<String>, Option<DownloadOpts>)| {
+                this.download_binary(url, name, opts)
             },
         );
         methods.add_method("print", |_, this, ()| {
@@ -234,7 +223,7 @@ impl Project {
         self.spec.files.push(File {
             src: val.as_ref().to_string_lossy().to_string(),
             dst: dst.to_string_lossy().to_string(),
-            mode: 0o755,
+            mode: Some(0o755),
         });
         Ok(())
     }
@@ -274,7 +263,7 @@ impl Project {
         self.spec.files.push(File {
             src,
             dst,
-            mode: 0o644,
+            mode: Some(0o644),
         });
         Ok(())
     }
@@ -316,8 +305,31 @@ impl Project {
         self.spec.files.push(File {
             src: base.to_string_lossy().to_string(),
             dst: "/".to_string(),
-            mode: 0,
+            mode: None,
         });
+        Ok(())
+    }
+
+    fn download_binary(
+        &mut self,
+        url: String,
+        name: Option<String>,
+        opts: Option<DownloadOpts>,
+    ) -> mlua::Result<()> {
+        let fname = match name {
+            Some(n) => n,
+            None => util::url_filename(&url).map_err(|e| mlua::Error::runtime(e))?,
+        };
+        let out = self.bin_path(&fname);
+        let opts = DownloadOpts {
+            url: None,
+            release: None,
+            arch: None,
+            out: Some(out.clone()),
+            compression: opts.and_then(|o| o.compression),
+        };
+        dl::fetch(url, opts).map_err(|e| mlua::Error::runtime(e))?;
+        self.add_bin(&out)?;
         Ok(())
     }
 }

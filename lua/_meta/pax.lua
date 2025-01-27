@@ -17,6 +17,7 @@ pax = {}
 --- @field release? string
 --- @field arch? string
 --- @field out? string
+--- @field compression? number 1 for gzip, 2 for xz
 
 --- @class pax.Go
 --- @field root      string  Root directory to run the go command in.
@@ -199,6 +200,11 @@ pax.os = {}
 --- @return number
 function pax.os.exec(bin, args, opts) end
 
+--- Locate a binary in the $PATH
+--- @param name string
+--- @return string
+function pax.os.which(name) end
+
 pax.path = {}
 
 --- @vararg string
@@ -259,7 +265,8 @@ function Project:cargo_build(opts) end
 
 --- @param url string
 --- @param name? string
-function Project:download_binary(url, name) end
+--- @param opts? pax.DownloadOpts
+function Project:download_binary(url, name, opts) end
 
 --- @param opts? pax.DownloadOpts
 function Project:download_kubectl(opts) end

@@ -8,9 +8,13 @@ use hyper::body::Buf;
 
 #[derive(Clone, Default, pax_derive::FromLuaTable)]
 pub struct DownloadOpts {
+    pub url: Option<String>,
     pub release: Option<String>,
     pub arch: Option<String>,
     pub out: Option<String>,
+    // 1 - gzip
+    // 2 - xz
+    pub compression: Option<i32>,
 }
 
 macro_rules! opt {
@@ -47,7 +51,7 @@ pub(crate) fn fetch(url: String, opts: DownloadOpts) -> Result<()> {
         None => anyhow::bail!("no output file given when downloading {}", url),
         Some(s) => s,
     };
-    runtime()?.block_on(download(&url, out, 0o664))?;
+    runtime()?.block_on(download(&url, out, 0o664, opts.compression))?;
     Ok(())
 }
 
@@ -63,7 +67,7 @@ pub(crate) fn kubectl(opts: DownloadOpts) -> Result<String> {
         opt!(opts, arch, "amd64")
     );
     let out = opt!(opts, out, "bin/kubectl");
-    runtime.block_on(download(&u, out, 0o755))?;
+    runtime.block_on(download(&u, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -74,7 +78,7 @@ pub(crate) fn jq(opts: DownloadOpts) -> Result<String> {
         opt!(opts, release, "1.7.1"),
         opt!(opts, arch, "amd64")
     );
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -84,7 +88,7 @@ pub(crate) fn youtube_dl(opts: DownloadOpts) -> Result<String> {
         opt!(opts, release, "2021.12.17")
     );
     let out = opt!(opts, out, "bin/youtube-dl");
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -95,7 +99,7 @@ pub(crate) fn yt_dlp(opts: DownloadOpts) -> Result<String> {
         "https://github.com/yt-dlp/yt-dlp/releases/download/{}/yt-dlp",
         release
     );
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -105,7 +109,7 @@ pub(crate) fn mc(opts: DownloadOpts) -> Result<String> {
         opt!(opts, arch, "amd64")
     );
     let out = opt!(opts, out, "bin/mc");
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -120,7 +124,7 @@ pub(crate) fn tetris(opts: DownloadOpts) -> Result<String> {
         arch
     );
     let out = opt!(opts, out, "bin/tetris");
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -135,7 +139,7 @@ pub(crate) fn balena_etcher(opts: DownloadOpts) -> Result<String> {
         release=opt!(opts, release, "1.18.11")
     );
     let out = opt!(opts, out, "bin/BalenaEtcher.AppImage");
-    runtime()?.block_on(download(&url, out, 0o755))?;
+    runtime()?.block_on(download(&url, out, 0o755, None))?;
     Ok(out.into())
 }
 
@@ -164,18 +168,33 @@ fn client() -> Client {
 
 static REDIRECT_LIMIT: u8 = 10;
 
-async fn download(u: &str, out: &str, mode: u32) -> Result<()> {
+async fn download(u: &str, out: &str, mode: u32, compression: Option<i32>) -> Result<()> {
     let client = client();
     let res = get(u, client).await?;
     let body = res.into_body();
     let mut body_bytes = hyper::body::to_bytes(body).await?.reader();
+    if let Some(p) = Path::new(&out).parent() {
+        _ = fs::create_dir_all(p);
+    }
     let mut f = fs::File::options()
         .mode(mode)
         .create(true)
         .write(true)
         .truncate(true)
         .open(&out)?;
-    io::copy(&mut body_bytes, &mut f)?;
+    match compression {
+        Some(1) => {
+            let mut dec = flate2::read::GzDecoder::new(body_bytes);
+            io::copy(&mut dec, &mut f)?;
+        }
+        Some(2) => {
+            let mut dec = xz2::read::XzDecoder::new(body_bytes);
+            io::copy(&mut dec, &mut f)?;
+        }
+        _ => {
+            io::copy(&mut body_bytes, &mut f)?;
+        }
+    };
     Ok(())
 }
 
@@ -211,5 +230,31 @@ async fn get(u: &str, client: Client) -> Result<hyper::Response<hyper::Body>> {
             anyhow::bail!("bad status code: {}", status);
         }
         break Ok(res);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::task::JoinSet;
+
+    async fn doit() {
+        let mut set = JoinSet::new();
+        for i in 0..10 {
+            set.spawn(async move { i });
+        }
+        while let Some(res) = set.join_next().await {
+            println!("{}", res.unwrap());
+        }
+    }
+
+    #[test]
+    fn tokio() {
+        println!("hello");
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(doit());
     }
 }

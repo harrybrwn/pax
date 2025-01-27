@@ -1,8 +1,9 @@
 use std::{
     cell::{Ref, RefCell, RefMut},
     fs,
-    io::{self, BufWriter, Write},
+    io::{self, BufRead, BufWriter, Write},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
 use md5::{Digest, Md5};
@@ -154,7 +155,7 @@ impl BuildSpec {
         Ok(())
     }
 
-    pub(crate) fn build<P>(&self, dir: P) -> io::Result<()>
+    pub(crate) fn build<P>(&mut self, dir: P) -> io::Result<()>
     where
         P: AsRef<std::path::Path>,
     {
@@ -168,7 +169,7 @@ impl BuildSpec {
             .create(true)
             .truncate(true)
             .write(true)
-            .mode(0o664)
+            .mode(0o666)
             .open(path)?;
         let now = mtime_now();
         let mut archive = deb::DebArchive::new(BufWriter::new(package_file), now);
@@ -182,8 +183,10 @@ impl BuildSpec {
         let mut hashes = Vec::with_capacity(self.files.len());
         let size = {
             let mut b = deb::DataBuilder::new(data_enc, &mut hashes);
-            for file in &self.files {
-                b.add_path(&file.src, &file.dst).map_err(|e| {
+            let files = &mut self.files;
+            files.sort_by_key(|f| f.dst.clone());
+            for file in files {
+                b.add_path(&file.src, &file.dst, file.mode).map_err(|e| {
                     io::Error::new(e.kind(), format!("{}: failed to add file to archive", e))
                 })?;
             }
@@ -337,7 +340,22 @@ impl BuildSpec {
     }
 
     pub(crate) fn parse<R: io::Read>(r: R) -> anyhow::Result<Self> {
-        Ok(Self {})
+        let mut s = Self::default();
+        let buf = io::BufReader::new(r);
+        for line in buf.lines().map_while(Result::ok) {
+            if let Some(ix) = line.find(':') {
+                let (key, val) = line.split_at(ix);
+                match key.trim().to_lowercase().as_ref() {
+                    "package" => s.package = String::from(val.trim()),
+                    "version" => s.version = String::from(val.trim()),
+                    "maintainer" => s.maintainer = Some(String::from(val.trim())),
+                    // "urgency" => s.urgency = Some(val.trim().into()),
+                    "homepage" => s.homepage = Some(String::from(val.trim())),
+                    _ => {}
+                };
+            }
+        }
+        todo!()
     }
 }
 
@@ -379,7 +397,7 @@ impl mlua::FromLua<'_> for RefCellBuildSpec {
 pub(crate) struct File {
     pub src: String,
     pub dst: String,
-    pub mode: u32,
+    pub mode: Option<u32>,
 }
 
 impl File {
@@ -387,7 +405,7 @@ impl File {
         Self {
             src: String::from(src.as_ref()),
             dst: String::from(dst.as_ref()),
-            mode: 0,
+            mode: None,
         }
     }
 
@@ -396,14 +414,18 @@ impl File {
         P: AsRef<Path>,
     {
         let src = match src.as_ref().to_str() {
-            None => return Err(to_io_err("failed to convert path to string")),
             Some(s) => String::from(s),
+            None => return Err(to_io_err("failed to convert path to string")),
         };
         let dst = match dst.as_ref().to_str() {
             Some(s) => String::from(s),
             None => return Err(to_io_err("failed to convert path to string")),
         };
-        Ok(Self { src, dst, mode })
+        Ok(Self {
+            src,
+            dst,
+            mode: Some(mode),
+        })
     }
 }
 
@@ -414,7 +436,7 @@ impl mlua::FromLua<'_> for File {
             V::Table(tbl) => Ok(Self {
                 src: tbl.get("src")?,
                 dst: tbl.get("dst")?,
-                mode: tbl.get("mode").unwrap_or(0),
+                mode: tbl.get("mode").ok(),
             }),
             V::String(src) => {
                 let s = src.to_str()?;
@@ -450,7 +472,7 @@ impl<T: AsRef<Path>> TryFrom<(T, T, u32)> for File {
         Ok(Self {
             src,
             dst,
-            mode: value.2,
+            mode: Some(value.2),
         })
     }
 }

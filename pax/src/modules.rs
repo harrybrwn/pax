@@ -3,6 +3,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use mlua::Lua;
+use which::which;
 
 use crate::dl;
 use crate::git;
@@ -54,7 +55,8 @@ impl GitSubModule {
         Ok(git_version()?)
     }
     fn clone(_lua: &mlua::Lua, (repo, opts): (String, Option<GitCloneOpts>)) -> mlua::Result<()> {
-        git::git_clone(repo, opts.unwrap_or_default()).map_err(mlua::Error::runtime)?;
+        git::git_clone(opts.unwrap_or_else(|| GitCloneOpts::new(repo)))
+            .map_err(mlua::Error::runtime)?;
         Ok(())
     }
 }
@@ -291,7 +293,7 @@ fn path_from_lua(args: mlua::Variadic<mlua::Value>) -> mlua::Result<PathBuf> {
         .collect())
 }
 
-sub_module!(@userdata OsMod; exec);
+sub_module!(@userdata OsMod; exec, which);
 
 impl OsMod {
     fn exec(
@@ -299,5 +301,13 @@ impl OsMod {
         (bin, args, opts): (String, Option<Vec<String>>, Option<ExecOptions>),
     ) -> mlua::Result<i32> {
         Ok(exec(bin, args.unwrap_or(Vec::new()), opts)?)
+    }
+
+    fn which(_: &mlua::Lua, name: String) -> mlua::Result<String> {
+        Ok(which(name)
+            .map_err(|e| mlua::Error::runtime(e))?
+            .to_str()
+            .unwrap_or("")
+            .into())
     }
 }
