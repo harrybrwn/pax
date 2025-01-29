@@ -5,7 +5,7 @@ install: install-types
 	cargo install --path ./pax
 
 install-types:
-	mkdir -p /usr/share/LuaLS/pax/_meta/
+	mkdir --mode=0777 -p /usr/share/LuaLS/pax/_meta/
 	cp lua/_meta/pax.lua /usr/share/LuaLS/pax/_meta/
 
 uninstall:

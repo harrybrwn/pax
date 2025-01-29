@@ -229,6 +229,9 @@ async fn get(u: &str, client: Client) -> Result<hyper::Response<hyper::Body>> {
         if !status.is_success() {
             anyhow::bail!("bad status code: {}", status);
         }
+        if let Some(cc) = res.headers().get("Cache-Control") {
+            println!("{}: response has a cache-control of {:?}", u, cc);
+        }
         break Ok(res);
     }
 }

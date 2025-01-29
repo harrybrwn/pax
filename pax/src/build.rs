@@ -88,7 +88,7 @@ impl BuildSpec {
         if let Some(ref section) = self.section {
             writeln!(w, "Section: {}", section)?;
         } else {
-            writeln!(w, "Section: custom")?;
+            writeln!(w, "Section: misc")?;
         }
         writeln!(w, "Priority: {}", priority)?;
         writeln!(w, "Architecture: {}", self.arch)?;
@@ -96,7 +96,7 @@ impl BuildSpec {
             writeln!(w, "Maintainer: {}", maintainer)?;
         } else {
             match (&self.author, &self.email) {
-                (Some(author), Some(email)) => writeln!(w, "Maintainer: {} {}", author, email)?,
+                (Some(author), Some(email)) => writeln!(w, "Maintainer: {} <{}>", author, email)?,
                 (Some(author), None) => writeln!(w, "Maintainer: {}", author)?,
                 (None, Some(email)) => writeln!(w, "Maintainer: {}", email)?,
                 (None, None) => {

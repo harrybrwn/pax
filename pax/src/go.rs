@@ -24,6 +24,8 @@ pub(crate) struct Go<'lua> {
     generate: bool,
     // build_ldflags: Option<mlua::Value<'lua>>,
     build_ldflags: Option<mlua::Function<'lua>>,
+
+    pub(crate) bin_access_mode: Option<u32>,
 }
 
 impl<'lua> Go<'lua> {
@@ -189,6 +191,7 @@ impl<'lua> Go<'lua> {
             compiler: None,
             generate: false,
             build_ldflags: None,
+            bin_access_mode: None,
         }
     }
 

@@ -128,6 +128,7 @@ impl mlua::UserData for PaxConfig {
 
     fn add_methods<'lua, M: mlua::prelude::LuaUserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_function("print", print_function);
+        methods.add_function("log", Self::func_log);
         methods.add_method_mut("add", Self::method_add_spec);
         methods.add_method_mut("package", Self::method_package);
         methods.add_method_mut("package_crate", Self::method_build_crate);
@@ -142,7 +143,9 @@ impl mlua::UserData for PaxConfig {
             Ok(std::env::current_dir()?.to_string_lossy().to_string())
         });
         methods.add_function("project", |_, spec: BuildSpec| {
-            Ok(project::Project::from_spec(spec))
+            let p = project::Project::from_spec(spec);
+            p.validate_version()?;
+            Ok(p)
         });
         methods.add_function("scdoc", |_, opts: SCDocOpts| Ok(scdoc(opts)?));
     }
@@ -200,6 +203,11 @@ impl<'lua> PaxConfig {
         let res = func.call::<_, ()>(());
         std::env::set_current_dir(cwd)?;
         res
+    }
+
+    fn func_log(_: &mlua::Lua, msg: String) -> mlua::Result<()> {
+        println!("[\x1b[01;32mpax\x1b[0m] {}", msg);
+        Ok(())
     }
 
     fn method_package(_lua: &mlua::Lua, this: &mut Self, s: RefCellBuildSpec) -> mlua::Result<()> {

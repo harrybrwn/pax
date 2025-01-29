@@ -21,7 +21,7 @@ pub(crate) struct Cargo {
     /// flags. Default is "release".
     pub profile: Option<String>,
     /// verbosity level. 0 for off, 1 for on, 2 for very verbose
-    pub verbosity: u32,
+    pub verbosity: Option<u32>,
     pub features: Option<Vec<String>>,
     /// run cargo quietly.
     pub quiet: bool,
@@ -57,7 +57,7 @@ impl Cargo {
         let cli_config = self.config.to_owned().unwrap_or(vec![]);
 
         config.configure(
-            self.verbosity,
+            self.verbosity.unwrap_or(0),
             self.quiet,
             None,
             false,
@@ -120,8 +120,10 @@ impl Cargo {
         if self.quiet {
             args.push("--quiet");
         }
-        if self.verbosity > 0 {
-            args.push("--verbose");
+        if let Some(v) = self.verbosity {
+            if v > 0 {
+                args.push("--verbose");
+            }
         }
         let features = self.features.as_ref().map(|v| v.join(","));
         if let Some(ref features) = features {
@@ -177,7 +179,7 @@ impl Cargo {
             pkgid: None,
             target_dir: None,
             profile: Some("release".to_string()),
-            verbosity: 0,
+            verbosity: Some(0),
             features: None,
             quiet: false,
             keep_going: false,
@@ -195,7 +197,7 @@ impl Cargo {
             pkgid: tbl.get("pkgid")?,
             target_dir: tbl.get("target_dir")?,
             profile: tbl.get("profile")?,
-            verbosity: tbl.get("verbosity").unwrap_or(0),
+            verbosity: tbl.get("verbosity").ok(),
             features: tbl.get("features")?,
             quiet: tbl.get("quiet")?,
             keep_going: tbl.get("keep_going")?,

@@ -11,6 +11,7 @@ use xz2::read::XzDecoder;
 
 use crate::{
     build::{BuildSpec, File, DEFAULT_DIST},
+    deb::Version,
     dl::{self, DownloadOpts},
     go::Go,
     util::{self, scdoc, SCDocOpts},
@@ -37,6 +38,12 @@ impl Project {
         };
         _ = std::fs::create_dir_all(p.cache_dir());
         p
+    }
+
+    pub fn validate_version(&self) -> Result<(), io::Error> {
+        let _ = Version::try_from(self.spec.version.as_ref())
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("invalid version: {}", e)))?;
+        Ok(())
     }
 }
 
@@ -111,7 +118,11 @@ impl mlua::UserData for Project {
                 );
             }
             opts.build().map_err(mlua::Error::runtime)?;
-            this.add_bin(opts.out.unwrap())?;
+            if let Some(mode) = opts.bin_access_mode {
+                this.add_bin_mode(opts.out.unwrap(), mode)?;
+            } else {
+                this.add_bin(opts.out.unwrap())?;
+            }
             Ok(())
         });
         methods.add_method_mut("cargo_build", |lua, this, args: mlua::Value| {
@@ -213,6 +224,10 @@ impl Project {
     }
 
     fn add_bin<P: AsRef<Path>>(&mut self, val: P) -> mlua::Result<()> {
+        self.add_bin_mode(val, 0o755)
+    }
+
+    fn add_bin_mode<P: AsRef<Path>>(&mut self, val: P, mode: u32) -> mlua::Result<()> {
         let p = val.as_ref();
         let name = p
             .file_name()

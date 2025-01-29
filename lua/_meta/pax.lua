@@ -5,8 +5,22 @@ error("Cannot require a meta file")
 pax = {}
 
 --- @class pax.BuildSpec
---- @field name string
 --- @field package string
+--- @field version string
+--- @field name? string
+--- @field description? string
+--- @field essential? boolean
+--- @field author? string
+--- @field email? string
+--- @field maintainer? string
+--- @field homepage? string
+--- @field files pax.File[]
+--- @field dependencies string[]
+--- @field recommends? string[]
+--- @field priority? string
+--- @field arch string
+--- @field urgency? string
+--- @field apt_sources? any[]
 
 --- @class pax.File
 --- @field src string
@@ -75,6 +89,9 @@ function pax.cwd() end
 ---@param ... any
 function pax.print(...) end
 
+--- @param message string
+function pax.log(message) end
+
 --- @param s string
 --- @return number
 function pax.octal(s) end
@@ -94,7 +111,7 @@ function pax.in_dir(dir, fn) end
 pax.git = {}
 
 --- @class pax.GitCloneOpts
---- @field repo? string
+--- @field repo string
 --- @field dest? string
 --- @field branch? string
 --- @field depth? number
@@ -228,14 +245,15 @@ function pax.path.is_relative() end
 function pax.path.parent(...) end
 
 ---@class pax.Project
----@field base_dir  string
----@field man_dir   string
----@field version   string  Project's package version.
----@field package   string
----@field arch      string
----@field essential boolean
----@field author    string|nil Package author.
----@field email     string|nil Package email.
+---@field base_dir     string
+---@field man_dir      string
+---@field version      string  Project's package version.
+---@field package      string
+---@field arch         string
+---@field essential    boolean
+---@field author?      string Package author.
+---@field email?       string Package email.
+---@field description? string
 local Project = {}
 
 function Project:build() end
@@ -251,7 +269,7 @@ function Project:add_binary(path) end
 --- @vararg pax.File
 function Project:add_file(...) end
 
---- @param files string[]
+--- @param files pax.File[]
 function Project:add_files(files) end
 
 --- @param path string
