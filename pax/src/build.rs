@@ -3,7 +3,6 @@ use std::{
     fs,
     io::{self, BufRead, BufWriter, Write},
     path::{Path, PathBuf},
-    str::FromStr,
 };
 
 use md5::{Digest, Md5};
@@ -14,7 +13,7 @@ use mlua::{
 use pax_derive;
 use pax_derive::{FromLua, IntoLua as PaxIntoLua};
 
-use crate::deb;
+use crate::deb::{self, MaintainerScripts};
 use crate::util::{mtime_now, to_io_err};
 
 pub(crate) static DEFAULT_DIST: &str = "dist";
@@ -35,12 +34,17 @@ pub(crate) struct BuildSpec {
     #[lua_default(vec![])]
     pub(crate) dependencies: Vec<String>,
     pub(crate) recommends: Option<Vec<String>>,
+    pub(crate) suggests: Option<Vec<String>>,
     pub(crate) priority: deb::Priority,
     #[lua_default("all".to_string())]
     pub(crate) arch: String,
     pub(crate) urgency: Option<deb::Urgency>,
     pub(crate) section: Option<String>,
     pub(crate) apt_sources: Option<Vec<AptSources>>,
+    pub(crate) scripts: Option<MaintainerScripts>,
+
+    #[ignored]
+    pub(crate) buildno: Option<u32>,
 }
 
 macro_rules! tar_header {
@@ -83,7 +87,7 @@ impl BuildSpec {
         W: io::Write,
     {
         writeln!(w, "Package: {}", self.package)?;
-        writeln!(w, "Version: {}", self.version)?;
+        writeln!(w, "Version: {}", self.version())?;
         let priority: &str = self.priority.into();
         if let Some(ref section) = self.section {
             writeln!(w, "Section: {}", section)?;
@@ -128,6 +132,11 @@ impl BuildSpec {
         if let Some(recommends) = &self.recommends {
             if !recommends.is_empty() {
                 writeln!(w, "Recommends: {}", recommends.join(", "))?;
+            }
+        }
+        if let Some(suggests) = &self.suggests {
+            if !suggests.is_empty() {
+                writeln!(w, "Suggests: {}", suggests.join(", "))?;
             }
         }
         Ok(())
@@ -186,9 +195,15 @@ impl BuildSpec {
             let files = &mut self.files;
             files.sort_by_key(|f| f.dst.clone());
             for file in files {
-                b.add_path(&file.src, &file.dst, file.mode).map_err(|e| {
-                    io::Error::new(e.kind(), format!("{}: failed to add file to archive", e))
-                })?;
+                if let Some(ref dir) = file.dir {
+                    b.add_dir(dir, file.mode.unwrap_or(0o755))?;
+                } else if file.src.len() == 0 {
+                    b.add_dir(&file.dst, file.mode.unwrap_or(0o755))?;
+                } else {
+                    b.add_path(&file.src, &file.dst, file.mode).map_err(|e| {
+                        io::Error::new(e.kind(), format!("{}: failed to add file to archive", e))
+                    })?;
+                }
             }
             b.size()
         };
@@ -256,12 +271,44 @@ impl BuildSpec {
                 &tar_header!("postrm", now, 0o755, postrm.len()),
                 postrm.as_slice(),
             )?;
+        } else if let Some(ref scripts) = self.scripts {
+            if let Some(ref preinst) = scripts.preinst {
+                ball.append(
+                    &tar_header!("preinst", now, 0o755, preinst.len()),
+                    preinst.trim().as_bytes(),
+                )?;
+            }
+            if let Some(ref postinst) = scripts.postinst {
+                ball.append(
+                    &tar_header!("postinst", now, 0o755, postinst.len()),
+                    postinst.trim().as_bytes(),
+                )?;
+            }
+            if let Some(ref prerm) = scripts.prerm {
+                ball.append(
+                    &tar_header!("prerm", now, 0o755, prerm.len()),
+                    prerm.trim().as_bytes(),
+                )?;
+            }
+            if let Some(ref postrm) = scripts.postrm {
+                ball.append(
+                    &tar_header!("postrm", now, 0o755, postrm.len()),
+                    postrm.trim().as_bytes(),
+                )?;
+            }
         }
         Ok(())
     }
 
     fn filename(&self) -> String {
-        format!("{}-v{}_{}.deb", self.package, self.version, self.arch)
+        format!("{}-v{}_{}.deb", self.package, self.version(), self.arch)
+    }
+
+    fn version(&self) -> String {
+        match self.buildno {
+            Some(n) if n > 0 => format!("{}-{}", self.version, n),
+            _ => self.version.clone(),
+        }
     }
 
     fn validate(&self) -> io::Result<()> {
@@ -332,10 +379,13 @@ impl BuildSpec {
             essential: overrides.get("essential")?,
             dependencies: fill_from!(overrides, "dependencies", Vec::new()),
             recommends: fill_from!(overrides, "recommends", None),
+            suggests: fill_from!(overrides, "suggests", None),
             priority: overrides.get("priority")?,
             urgency: overrides.get("urgency")?,
             section: overrides.get("section")?,
             apt_sources: overrides.get("apt_sources")?,
+            scripts: overrides.get("scripts").ok(),
+            buildno: None,
         })
     }
 
@@ -398,6 +448,7 @@ pub(crate) struct File {
     pub src: String,
     pub dst: String,
     pub mode: Option<u32>,
+    pub dir: Option<String>,
 }
 
 impl File {
@@ -406,6 +457,7 @@ impl File {
             src: String::from(src.as_ref()),
             dst: String::from(dst.as_ref()),
             mode: None,
+            dir: None,
         }
     }
 
@@ -425,6 +477,7 @@ impl File {
             src,
             dst,
             mode: Some(mode),
+            dir: None,
         })
     }
 }
@@ -437,6 +490,7 @@ impl mlua::FromLua<'_> for File {
                 src: tbl.get("src")?,
                 dst: tbl.get("dst")?,
                 mode: tbl.get("mode").ok(),
+                dir: None,
             }),
             V::String(src) => {
                 let s = src.to_str()?;
@@ -473,6 +527,7 @@ impl<T: AsRef<Path>> TryFrom<(T, T, u32)> for File {
             src,
             dst,
             mode: Some(value.2),
+            dir: None,
         })
     }
 }
@@ -593,6 +648,12 @@ fn toml_get_str(t: &toml::Value, key: &str) -> io::Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        io::{self, Read},
+        path::PathBuf,
+    };
+
     use super::Arch;
 
     #[test]
@@ -622,5 +683,39 @@ mod tests {
             let a = Arch::from(tt.input);
             assert_eq!(a, tt.out);
         }
+    }
+
+    #[test]
+    fn increment_file_number() {
+        use std::io::{Seek, SeekFrom, Write};
+        let p: PathBuf = ["/tmp", "number.txt"].iter().collect();
+        _ = fs::remove_file(&p);
+        {
+            let mut f = fs::File::options()
+                .write(true)
+                .create(true)
+                .open(&p)
+                .unwrap();
+            f.write(b"0").unwrap();
+        }
+        {
+            let mut f = fs::File::options().read(true).write(true).open(&p).unwrap();
+            let mut s = String::new();
+            f.read_to_string(&mut s).unwrap();
+            let mut n: u32 = s.trim().parse().unwrap();
+            assert_eq!(n, 0);
+            n += 2;
+            f.seek(SeekFrom::Start(0)).unwrap();
+            f.set_len(0).unwrap();
+            f.write(n.to_string().as_bytes()).unwrap();
+        }
+        {
+            let mut f = fs::File::options().read(true).open(&p).unwrap();
+            let mut s = String::new();
+            f.read_to_string(&mut s).unwrap();
+            let n: u32 = s.parse().unwrap();
+            assert_eq!(n, 2);
+        }
+        _ = fs::remove_file(&p);
     }
 }

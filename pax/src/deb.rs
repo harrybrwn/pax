@@ -141,6 +141,17 @@ impl<'a, W: Write> DataBuilder<'a, W> {
         }
     }
 
+    pub(crate) fn add_dir<P>(&mut self, path: P, mode: u32) -> io::Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        let dst = strip_leading_slash(path);
+        let p = dst.as_path();
+        self.add_parent_directories(p)?;
+        self.directory_with_mode(p, mode)?;
+        Ok(())
+    }
+
     fn add_reader<P, R>(&mut self, dest: P, reader: R, size: u64, mode: u32) -> io::Result<()>
     where
         P: AsRef<Path>,
@@ -178,11 +189,11 @@ impl<'a, W: Write> DataBuilder<'a, W> {
         self.add_reader(dest, reader, meta.size(), meta.mode())
     }
 
-    fn directory(&mut self, path: &Path) -> io::Result<()> {
+    fn directory_with_mode(&mut self, path: &Path, mode: u32) -> io::Result<()> {
         let mut header = tar::Header::new_gnu();
         header.set_mtime(self.time);
         header.set_size(0);
-        header.set_mode(0o755);
+        header.set_mode(mode);
         let mut path_str = path.to_string_lossy().to_string();
         if !path_str.ends_with('/') {
             path_str += "/";
@@ -194,6 +205,10 @@ impl<'a, W: Write> DataBuilder<'a, W> {
     }
 
     fn add_parent_directories(&mut self, path: &Path) -> io::Result<()> {
+        self.add_parent_directories_mode(path, 0o755)
+    }
+
+    fn add_parent_directories_mode(&mut self, path: &Path, mode: u32) -> io::Result<()> {
         // Append each of the directories found in the file's pathname to the archive before adding the file
         // For each directory pathname found, attempt to add it to the list of directories
         let asset_relative_dir =
@@ -207,7 +222,7 @@ impl<'a, W: Write> DataBuilder<'a, W> {
             }
             if !self.dirs.contains(&directory) {
                 self.dirs.insert(directory.clone());
-                self.directory(&directory)?;
+                self.directory_with_mode(&directory, mode)?;
             }
         }
         Ok(())
@@ -464,6 +479,14 @@ where
         (None, Some(bb)) => Some(bb),
         (None, None) => None,
     }
+}
+
+#[derive(Default, Debug, Clone, pax_derive::IntoLua, pax_derive::FromLua)]
+pub(crate) struct MaintainerScripts {
+    pub preinst: Option<String>,
+    pub postinst: Option<String>,
+    pub prerm: Option<String>,
+    pub postrm: Option<String>,
 }
 
 #[cfg(test)]

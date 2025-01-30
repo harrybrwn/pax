@@ -38,6 +38,9 @@ enum Command {
     /// Run the cli
     #[default]
     Run,
+    /// Generate lua annotations.
+    #[clap(hide = true)]
+    Generate,
 }
 
 impl Cli {
@@ -265,6 +268,17 @@ fn main() {
             let res = std::fs::read(&cli.config).unwrap();
             let s = String::from_utf8(res).unwrap();
             println!("{s}");
+        }
+        Some(Command::Generate) => {
+            let annotations = include_bytes!("./lua/_meta/pax.lua");
+            let s = match String::from_utf8(annotations.to_vec()) {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("Error: {e}");
+                    std::process::exit(1);
+                }
+            };
+            print!("{}", s);
         }
         Some(Command::Test) => {}
         _ => {

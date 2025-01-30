@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::{self, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -23,6 +23,7 @@ pub(crate) struct Project {
     id: [u8; 16],
     base_dir: String,
     man_dir: String,
+    build: Option<u32>,
 }
 
 impl Project {
@@ -35,6 +36,7 @@ impl Project {
             id: md5.finalize().into(),
             base_dir: "/usr".to_string(),
             man_dir: "/usr/share/man".to_string(),
+            build: None,
         };
         _ = std::fs::create_dir_all(p.cache_dir());
         p
@@ -154,6 +156,12 @@ impl mlua::UserData for Project {
         methods.add_method_mut("merge_deb", |_, this, source: String| {
             this.merge_deb(&source)
         });
+        methods.add_method_mut("reset_build_number", |_, this, ()| {
+            this.set_build(0).map_err(|e| mlua::Error::runtime(e))
+        });
+        methods.add_method_mut("enable_auto_build_numbers", |_, this, ()| {
+            this.init_build_no().map_err(|e| mlua::Error::runtime(e))
+        });
         methods.add_method_mut("download_kubectl", |_, this, opts: DownloadOpts| {
             let mut opts = opts.clone();
             opts.out = Some(this.bin_path("kubectl"));
@@ -218,9 +226,13 @@ impl mlua::UserData for Project {
 
 impl Project {
     fn cache_dir(&self) -> PathBuf {
-        [".pax/project".to_string(), hex::encode(self.id)]
-            .iter()
-            .collect()
+        [
+            ".pax/project".to_string(),
+            self.spec.package.clone(),
+            hex::encode(self.id),
+        ]
+        .iter()
+        .collect()
     }
 
     fn add_bin<P: AsRef<Path>>(&mut self, val: P) -> mlua::Result<()> {
@@ -238,13 +250,18 @@ impl Project {
         self.spec.files.push(File {
             src: val.as_ref().to_string_lossy().to_string(),
             dst: dst.to_string_lossy().to_string(),
-            mode: Some(0o755),
+            mode: Some(mode),
+            dir: None,
         });
         Ok(())
     }
 
     fn build(&mut self) -> mlua::Result<()> {
         _ = std::fs::create_dir_all(DEFAULT_DIST);
+        if let Some(n) = self.build {
+            self.spec.buildno = Some(n);
+            self.increment_build_no()?;
+        }
         self.spec.pre_process(Some(self.base_dir.clone()))?;
         self.spec.build(DEFAULT_DIST.to_string())?;
         Ok(())
@@ -279,6 +296,7 @@ impl Project {
             src,
             dst,
             mode: Some(0o644),
+            dir: None,
         });
         Ok(())
     }
@@ -321,6 +339,7 @@ impl Project {
             src: base.to_string_lossy().to_string(),
             dst: "/".to_string(),
             mode: None,
+            dir: None,
         });
         Ok(())
     }
@@ -347,4 +366,71 @@ impl Project {
         self.add_bin(&out)?;
         Ok(())
     }
+
+    fn init_build_no(&mut self) -> io::Result<()> {
+        self.build = Some(self.get_build()?);
+        Ok(())
+    }
+
+    fn increment_build_no(&self) -> io::Result<u32> {
+        use std::io::Seek;
+        let path = self.cache_dir().join("buildno.txt");
+        if !path.exists() {
+            let mut f = fs::File::options().write(true).create(true).open(&path)?;
+            f.write(b"0")?;
+            return Ok(0);
+        }
+        let mut f = fs::File::options().read(true).write(true).open(&path)?;
+        let mut str_no = String::new();
+        f.read_to_string(&mut str_no)?;
+        let mut n: u32 = str_no
+            .parse()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+        n += 1;
+        f.seek(io::SeekFrom::Start(0))?;
+        f.set_len(0)?;
+        f.write(n.to_string().as_bytes())?;
+        Ok(n)
+    }
+
+    fn get_build(&self) -> io::Result<u32> {
+        let path = self.cache_dir().join("buildno.txt");
+        if !path.exists() {
+            let mut f = fs::File::options().write(true).create(true).open(&path)?;
+            f.write(b"0")?;
+            return Ok(0);
+        }
+        let mut f = fs::File::options().read(true).open(&path)?;
+        let mut s = String::new();
+        f.read_to_string(&mut s)?;
+        Ok(s.trim()
+            .parse()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?)
+    }
+
+    fn set_build(&mut self, n: u32) -> io::Result<()> {
+        let path = self.cache_dir().join("buildno.txt");
+        if !path.exists() {
+            let mut f = fs::File::options().write(true).create(true).open(&path)?;
+            f.write(n.to_string().as_bytes())?;
+            return Ok(());
+        }
+        let mut f = fs::File::options().write(true).truncate(true).open(&path)?;
+        f.write(n.to_string().as_bytes())?;
+        self.build = Some(n);
+        Ok(())
+    }
+}
+
+fn get_build(path: &PathBuf, f: &mut fs::File) -> io::Result<u32> {
+    if !path.exists() {
+        let mut newf = fs::File::options().write(true).create(true).open(&path)?;
+        newf.write(b"0")?;
+        return Ok(0);
+    }
+    let mut s = String::new();
+    f.read_to_string(&mut s)?;
+    Ok(s.trim()
+        .parse()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?)
 }

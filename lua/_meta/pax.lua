@@ -21,6 +21,34 @@ pax = {}
 --- @field arch string
 --- @field urgency? string
 --- @field apt_sources? any[]
+--- @field scripts? pax.MaintainerScripts
+
+--- @enum pax.Urgency
+pax.Urgency = {
+  Low = 0,
+  Medium = 1,
+  High = 2,
+  Emergency = 3,
+  Critical = 4,
+}
+
+--- @enum pax.Priority
+pax.Priority = {
+  Required = 0,
+  Important = 1,
+  Standard = 2,
+  Optional = 3,
+  Extra = 4,
+  Invalid = 5,
+}
+
+--- @enum pax.Architecture
+pax.Architecture = {
+  All = 0,
+  Any = 1,
+  Source = 2,
+  Invalid = 3,
+}
 
 --- @class pax.File
 --- @field src string
@@ -59,6 +87,12 @@ pax = {}
 --- @field target? string
 --- @field embeded_cargo? boolean
 --- @field clean? boolean
+
+--- @class pax.MaintainerScripts
+--- @field preinst? string
+--- @field postinst? string
+--- @field prerm? string
+--- @field postrm? string
 
 --- @class pax.SCDocOpts
 --- @field input string
@@ -280,6 +314,10 @@ function Project:go_build(opts) end
 
 --- @param opts pax.Cargo
 function Project:cargo_build(opts) end
+
+function Project:reset_build_number() end
+
+function Project:enable_auto_build_numbers() end
 
 --- @param url string
 --- @param name? string
