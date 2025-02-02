@@ -3,7 +3,7 @@ use std::{
     fmt,
     fs::{self, DirEntry},
     hash::Hash,
-    io,
+    io::{self, BufRead, Write},
     ops::Deref,
     os::raw::c_void,
     path::Path,
@@ -439,4 +439,92 @@ pub fn url_filename(input: &str) -> anyhow::Result<String> {
         .and_then(|p| p.rev().next())
         .and_then(|s| Some(String::from(s)))
         .ok_or_else(|| anyhow::anyhow!("failed to get uri path segments"))?)
+}
+
+#[derive(Debug, Default)]
+pub struct GccFeatures {
+    pub glibc_version_major: u32,
+    pub glibc_version_minor: u32,
+    pub linux: bool,
+    pub unix: bool,
+    pub gnuc_version_major: u32,
+    pub gnuc_version_minor: u32,
+    pub gnuc_version_patch: u32,
+}
+
+pub(crate) fn gcc_features() -> Result<GccFeatures, io::Error> {
+    let mut child = process::Command::new("gcc")
+        .args(&["-dM", "-E", "-"])
+        .stdin(process::Stdio::piped())
+        .stdout(process::Stdio::piped())
+        .spawn()?;
+    let mut stdin = child.stdin.take().ok_or(io::Error::new(
+        io::ErrorKind::Interrupted,
+        "failed to get child process stdin",
+    ))?;
+    std::thread::spawn(move || {
+        stdin
+            .write("#include <features.h>".as_bytes())
+            .expect("failed to write to pipe");
+    });
+
+    let out = child.wait_with_output()?;
+
+    let mut f = GccFeatures::default();
+    for line in out.stdout.lines() {
+        let l = line?;
+        let def = match l.strip_prefix("#define ") {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        if let Some(v) = def.strip_prefix("__GLIBC__ ") {
+            f.glibc_version_major = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        } else if let Some(v) = def.strip_prefix("__GLIBC_MINOR__ ") {
+            f.glibc_version_minor = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        } else if let Some(v) = def.strip_prefix("__linux ") {
+            let n: i32 = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            f.linux = n == 1;
+        } else if let Some(v) = def.strip_prefix("__unix ") {
+            let n: i32 = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            f.unix = n == 1;
+        } else if let Some(v) = def.strip_prefix("__unix__ ") {
+            let n: i32 = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            f.unix = n == 1;
+        } else if let Some(v) = def.strip_prefix("__GNUC__ ") {
+            f.gnuc_version_major = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        } else if let Some(v) = def.strip_prefix("__GNUC_MINOR__ ") {
+            f.gnuc_version_minor = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        } else if let Some(v) = def.strip_prefix("__GNUC_PATCHLEVEL__ ") {
+            f.gnuc_version_patch = v
+                .parse()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        }
+    }
+    Ok(f)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gcc_features;
+
+    #[test]
+    fn get_gcc_features() {
+        let f = gcc_features().unwrap();
+        assert!(f.glibc_version_major == 2);
+        assert!(f.glibc_version_minor != 0);
+    }
 }

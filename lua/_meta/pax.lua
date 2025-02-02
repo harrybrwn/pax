@@ -256,6 +256,14 @@ function pax.os.exec(bin, args, opts) end
 --- @return string
 function pax.os.which(name) end
 
+--- @class pax.LibcVersion
+--- @field major number
+--- @field minor number
+
+--- Return the current version of libc.
+--- @return pax.LibcVersion
+function pax.os.libc_version() end
+
 pax.path = {}
 
 --- @vararg string

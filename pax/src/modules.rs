@@ -10,7 +10,7 @@ use crate::git;
 use crate::git::GitCloneOpts;
 use crate::go::Go;
 use crate::os::{exec, ExecOptions};
-use crate::util::{get_user_email, get_user_name, git_version};
+use crate::util::{gcc_features, get_user_email, get_user_name, git_version};
 
 macro_rules! sub_module {
     ($name:ident; $($func:ident),*) => {
@@ -293,7 +293,13 @@ fn path_from_lua(args: mlua::Variadic<mlua::Value>) -> mlua::Result<PathBuf> {
         .collect())
 }
 
-sub_module!(@userdata OsMod; exec, which);
+sub_module!(@userdata OsMod; exec, which, libc_version);
+
+#[derive(Debug, Default, pax_derive::FromLuaTable, pax_derive::IntoLua)]
+struct LibcVersion {
+    major: u32,
+    minor: u32,
+}
 
 impl OsMod {
     fn exec(
@@ -309,5 +315,13 @@ impl OsMod {
             .to_str()
             .unwrap_or("")
             .into())
+    }
+
+    fn libc_version(_: &mlua::Lua, _: ()) -> mlua::Result<LibcVersion> {
+        let f = gcc_features().map_err(|e| mlua::Error::runtime(e))?;
+        Ok(LibcVersion {
+            major: f.glibc_version_major,
+            minor: f.glibc_version_minor,
+        })
     }
 }

@@ -274,7 +274,7 @@ fn main() {
             let s = match String::from_utf8(annotations.to_vec()) {
                 Ok(s) => s,
                 Err(e) => {
-                    println!("Error: {e}");
+                    eprintln!("Error: {e}");
                     std::process::exit(1);
                 }
             };
@@ -283,7 +283,10 @@ fn main() {
         Some(Command::Test) => {}
         _ => {
             match cli.run(&lua) {
-                Err(e) => println!("Error: {}", e),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
                 Ok(_) => (),
             };
         }
