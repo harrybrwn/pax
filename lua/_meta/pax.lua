@@ -17,6 +17,11 @@ pax = {}
 --- @field files pax.File[]
 --- @field dependencies string[]
 --- @field recommends? string[]
+--- @field suggests? string[]
+--- @field conflicts? string[]
+--- @field breaks? string[]
+--- @field provides? string[]
+--- @field replaces? string[]
 --- @field priority? string
 --- @field arch string
 --- @field urgency? string

@@ -35,6 +35,10 @@ pub(crate) struct BuildSpec {
     pub(crate) dependencies: Vec<String>,
     pub(crate) recommends: Option<Vec<String>>,
     pub(crate) suggests: Option<Vec<String>>,
+    pub(crate) conflicts: Option<Vec<String>>,
+    pub(crate) breaks: Option<Vec<String>>,
+    pub(crate) provides: Option<Vec<String>>,
+    pub(crate) replaces: Option<Vec<String>>,
     pub(crate) priority: deb::Priority,
     #[lua_default("all".to_string())]
     pub(crate) arch: String,
@@ -42,7 +46,6 @@ pub(crate) struct BuildSpec {
     pub(crate) section: Option<String>,
     pub(crate) apt_sources: Option<Vec<AptSources>>,
     pub(crate) scripts: Option<MaintainerScripts>,
-
     #[ignored]
     pub(crate) buildno: Option<u32>,
 }
@@ -129,6 +132,7 @@ impl BuildSpec {
         if let Some(desc) = &self.description {
             writeln!(w, "Description: {}", desc)?;
         }
+
         if let Some(recommends) = &self.recommends {
             if !recommends.is_empty() {
                 writeln!(w, "Recommends: {}", recommends.join(", "))?;
@@ -137,6 +141,26 @@ impl BuildSpec {
         if let Some(suggests) = &self.suggests {
             if !suggests.is_empty() {
                 writeln!(w, "Suggests: {}", suggests.join(", "))?;
+            }
+        }
+        if let Some(conflicts) = &self.conflicts {
+            if !conflicts.is_empty() {
+                writeln!(w, "Conflicts: {}", conflicts.join(", "))?;
+            }
+        }
+        if let Some(breaks) = &self.breaks {
+            if !breaks.is_empty() {
+                writeln!(w, "Breaks: {}", breaks.join(", "))?;
+            }
+        }
+        if let Some(provides) = &self.provides {
+            if !provides.is_empty() {
+                writeln!(w, "Provides: {}", provides.join(", "))?;
+            }
+        }
+        if let Some(replaces) = &self.replaces {
+            if !replaces.is_empty() {
+                writeln!(w, "Replaces: {}", replaces.join(", "))?;
             }
         }
         Ok(())
@@ -365,6 +389,7 @@ impl BuildSpec {
                 }
             };
         }
+
         Ok(Self {
             name: Some(package.clone()),
             package,
@@ -380,6 +405,10 @@ impl BuildSpec {
             dependencies: fill_from!(overrides, "dependencies", Vec::new()),
             recommends: fill_from!(overrides, "recommends", None),
             suggests: fill_from!(overrides, "suggests", None),
+            conflicts: fill_from!(overrides, "conflicts", None),
+            breaks: fill_from!(overrides, "breaks", None),
+            provides: fill_from!(overrides, "provides", None),
+            replaces: fill_from!(overrides, "replaces", None),
             priority: overrides.get("priority")?,
             urgency: overrides.get("urgency")?,
             section: overrides.get("section")?,
